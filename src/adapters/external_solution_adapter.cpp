@@ -4,18 +4,20 @@
 #include <gnss_ros_standardization/GnssSolution.h>
 
 #include <Eigen/Core>
+#include <boost/array.hpp>
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <limits>
+#include <stdexcept>
 #include <string>
 
 namespace grs = gnss_ros_standardization;
 
 namespace {
 
-constexpr double kDegToRad = M_PI / 180.0;
+constexpr double kPi = 3.141592653589793238462643383279502884;
+constexpr double kDegToRad = kPi / 180.0;
 constexpr double kWgs84A = 6378137.0;
 constexpr double kWgs84F = 1.0 / 298.257223563;
 constexpr double kWgs84E2 = kWgs84F * (2.0 - kWgs84F);
@@ -79,7 +81,7 @@ class ExternalSolutionAdapter {
     pnh_.param<std::string>("input_topic", input_topic_, "/gnss/external_solution");
     pnh_.param<std::string>("output_topic", output_topic_, "/gnss/solution");
     pnh_.param<std::string>("frame_id", frame_id_, "gnss_link");
-    pnh_.param<bool>("auto_origin", auto_origin_, false);
+    pnh_.param<bool>("auto_origin", auto_origin_, true);
 
     double lat = 0.0, lon = 0.0, alt = 0.0;
     pnh_.param<double>("origin_latitude", lat, 0.0);
