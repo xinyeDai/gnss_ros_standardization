@@ -1,0 +1,10 @@
+format: ubx
+stream_type: serial
+stream_path: /dev/ttyACM0:115200:8:n:1:off
+receiver_option: ""
+frame_id: rover_gnss
+use_gps_timestamp: false
+poll_period_ms: 10
+observation_topic: /rover/gnss/observation
+ephemeris_topic: /gnss/ephemeris
+station_topic: /rover/gnss/station_ecef
