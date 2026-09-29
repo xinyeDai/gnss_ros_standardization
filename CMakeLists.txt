@@ -43,6 +43,7 @@ catkin_package(
 include_directories(
   ${catkin_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIRS}
+  ${EIGEN3_INCLUDE_DIR}
 )
 
 # Phase 1 ROS1/Noetic integration:
