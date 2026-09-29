@@ -1,138 +1,200 @@
-# gnss_ros_standardization
+# gnss_ros_standardization — ROS1 Noetic branch
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![ROS 2](https://img.shields.io/badge/ROS%202-Humble%20%7C%20Jazzy-brightgreen)](https://docs.ros.org/en/humble/)
+This branch provides a ROS1/catkin GNSS standardization layer with **two input
+modes and one common solution interface**.
 
-## Overview
+```
+Mode A: Raw GNSS
+receiver / RTCM byte stream
+        |
+        v
+raw_gnss_decoder
+        |
+        +--> GnssObservations
+        +--> GnssEphemerides
+                 |
+          +------+------+
+          |             |
+          v             v
+         SPP            RTK
+          |             |
+          +------+------+
+                 v
+            GnssSolution
 
-<p align="center">
-  <img src="fig/overview.svg" alt="Repository overview and scope" width="850">
-</p>
+Mode B: External solved GNSS
+timestamp + WGS84 BLH + covariance + status (+ optional velocity)
+                 |
+                 v
+       ExternalGnssSolution
+                 |
+                 v
+   external_solution_adapter
+                 |
+                 v
+            GnssSolution
+```
 
-**gnss_ros_standardization** is an open-source ROS 2 package that standardizes
-GNSS raw-data handling for robotics and autonomous systems.
+Downstream LIO/LIVO/SLAM systems should consume `GnssSolution` regardless of
+where the GNSS solution came from.
 
-The goal is to make GNSS raw observations and ephemeris uniformly accessible
-across receiver brands so that tight-coupling GNSS/IMU methods and multi-sensor
-fusion frameworks can be developed once and reused everywhere.
+## ROS1 nodes
 
-- Subscribe to raw GNSS observations via standardized ROS 2 topics in robotics applications
-- Support diverse GNSS receivers and formats (u-blox, Septentrio, NovAtel, RTCM3)
-- Reproduce experiments across systems with consistent interfaces
+| Node | Role |
+|---|---|
+| `raw_gnss_decoder` | Decode UBX, Septentrio SBF, NovAtel OEM or RTCM3 streams into standardized raw observations/ephemerides |
+| `single_point_positioning` | RTKLIB SPP from `GnssObservations + GnssEphemerides` |
+| `real_time_kinematic` | RTKLIB rover/base RTK from standardized raw observations |
+| `external_solution_adapter` | Normalize an already-computed GNSS/PVT/RTK solution |
 
-## Demo
+## Public interfaces
 
-Hardware and ROS 2 node configuration used in the demo:
+Raw-mode interfaces:
 
-<p align="center">
-  <img src="fig/demo_setup.svg" alt="Hardware and ROS 2 node configuration" width="850">
-</p>
+- `GnssObservation.msg`
+- `GnssObservations.msg`
+- `GnssEphemeris.msg`
+- `GlonassEphemeris.msg`
+- `GnssEphemerides.msg`
 
-Demo of real-time kinematic (RTK) positioning using this ROS 2 package:
+Solution-level interfaces:
 
-<p align="center">
-  <img src="fig/rtk_demo.gif" alt="RTK positioning demo" width="800">
-</p>
+- `ExternalGnssSolution.msg` — input contract for already-solved GNSS data
+- `GnssSolution.msg` — common downstream output
 
-## Supported ROS 2 distributions
+The common solution carries GNSS time, standardized solution status, BLH, ECEF,
+ENU, covariance, velocity and quality indicators.
 
-| Distribution | Ubuntu | Status |
-|---|---|---|
-| Humble Hawksbill (LTS) | 22.04 | Supported |
-| Jazzy Jalisco (LTS) | 24.04 | Supported |
+## Build
 
-## Supported receivers (summary)
-
-| Receiver | Observations | Ephemeris | NMEA Solution | IMU measurement |
-|---|---|---|---|---|
-| u-blox (UBX) | ✓ | ✓ | ✓ | ✓ |
-| Septentrio (SBF) | ✓ | ✓ | ✓ | ✓ |
-| NovAtel (OEM4/6/7) | ✓ | ✓ | ✓ | ✓ |
-| RTCM3 (MSM4/7) | ✓ | ✓ | — | — |
-
-Per-receiver protocol message tables (UBX message IDs, SBF block IDs,
-NovAtel log IDs, RTCM types) are shown in the component READMEs.
-
-## Dependencies
-
-- **OS**: Ubuntu 22.04 (Humble) or 24.04 (Jazzy)
-- **ROS 2**: Humble or Jazzy
-- **Build tool**: `colcon`
-- **ROS packages** (installed via `rosdep`):
-  `rclcpp`, `rcutils`, `std_msgs`, `geometry_msgs`, `sensor_msgs`, `nav_msgs`,
-  `builtin_interfaces`, `rosbag2_cpp`, `rosbag2_storage`, `cv_bridge`,
-  `image_transport`
-- **System libraries**: Eigen3 ≥ 3.3 (`sudo apt install libeigen3-dev`)
-- **Third-party** (vendored as a git submodule):
-  [RTKLIB (rtklibexplorer fork)](https://github.com/rtklibexplorer/RTKLIB)
-  — RTKLIB by T. Takasu, demo5 fork by T. Everett (BSD 2-Clause)
-- **Optional** — only for the opt-in tightly-coupled FGO examples
-  (`-DBUILD_GTSAM_FGO_EXAMPLES=ON`): [GTSAM](https://github.com/borglab/gtsam)
-  (develop branch, BSD-3-Clause).
-
-## Installation
+Ubuntu 20.04 + ROS Noetic:
 
 ```bash
-git clone --recursive https://github.com/DaikiNiimi/gnss_ros_standardization.git
+cd ~/catkin_ws/src
+git clone --recursive -b ros1-noetic https://github.com/xinyeDai/gnss_ros_standardization.git
 cd gnss_ros_standardization
-rosdep install --from-paths . --ignore-src -r -y
-colcon build
-source install/setup.bash
+git submodule update --init --recursive
+
+cd ~/catkin_ws
+catkin_make
+source devel/setup.bash
 ```
 
-If you cloned the repository without `--recursive`, make sure to run `git submodule update --init --recursive`.
+The RTKLIB submodule is required for Raw Mode.
 
-### Optional: tightly-coupled FGO examples (GTSAM)
+## Mode A — raw observation processing
 
-The [tightly-coupled FGO examples](examples/tightly_coupled_fgo/) (`gnss_fgo`,
-`gnss_imu_fgo`) need [GTSAM](https://github.com/borglab/gtsam) built from its
-`develop` branch (the GNSS factors are not in a release tag yet). `rosdep`/`colcon`
-do not fetch it — build it once:
+### SPP
+
+Configure `config/raw_gnss_decoder.yaml` for the receiver stream, then:
 
 ```bash
-git clone https://github.com/borglab/gtsam.git && cd gtsam && git checkout develop
-cmake -B build -DCMAKE_BUILD_TYPE=Release \
-  -DGTSAM_USE_SYSTEM_EIGEN=ON -DGTSAM_BUILD_WITH_MARCH_NATIVE=OFF \
-  -DGTSAM_BUILD_TESTS=OFF -DGTSAM_BUILD_UNSTABLE=OFF -DGTSAM_BUILD_PYTHON=OFF \
-  -DCMAKE_INSTALL_PREFIX=$HOME/gtsam-install
-cmake --build build -j"$(nproc)" && cmake --install build && cd ..
-
-colcon build --cmake-args -DBUILD_GTSAM_FGO_EXAMPLES=ON \
-  -DGTSAM_DIR=$HOME/gtsam-install/lib/cmake/GTSAM
+roslaunch gnss_ros_standardization raw_spp.launch
 ```
 
-`GTSAM_USE_SYSTEM_EIGEN=ON` and `GTSAM_BUILD_WITH_MARCH_NATIVE=OFF` are **required**
-(this package uses the system Eigen). The FGO binaries embed the GTSAM path via
-RPATH, so no `LD_LIBRARY_PATH` is needed at runtime.
+Data path:
 
-## Components
+```
+receiver raw stream
+ -> /gnss/observation
+ -> /gnss/ephemeris
+ -> single_point_positioning
+ -> /gnss/solution
+```
 
-Each component has its own README with detailed information including message
-tables, parameter lists, and `ros2 run` examples.
+### RTK
 
-| Component | Purpose | README |
-|---|---|---|
-| Decoders | Stream-only: NTRIP / TCP / Serial → ROS topics | [src/decoders/README.md](src/decoders/README.md) |
-| Drivers | Connect to receiver, configure outputs, decode | [src/drivers/README.md](src/drivers/README.md) |
-| Converters | RINEX ↔ rosbag and RTKLIB `.pos` ↔ rosbag | [src/converter/README.md](src/converter/README.md) |
-| Examples | SPP, RTK, loose-coupled GNSS/IMU EKF, tightly-coupled FGO (GTSAM) | [examples/README.md](examples/README.md) |
-| Messages | Public ROS message contract | [msg/README.md](msg/README.md) |
-| Tests & tools | Unit tests, and checks for a converted rosbag against its source files | [test/README.md](test/README.md) |
+Example configs are provided for a raw rover receiver and an RTCM/NTRIP base:
 
-## Acknowledgements
+```bash
+roslaunch gnss_ros_standardization raw_rtk.launch
+```
 
-This project uses [RTKLIB (rtklibexplorer fork)](https://github.com/rtklibexplorer/RTKLIB),
-maintained by Tim Everett, based on [RTKLIB](https://github.com/tomojitakasu/RTKLIB)
-by Tomoji Takasu, licensed under BSD 2-Clause.
+Data path:
 
-The tightly-coupled FGO examples build on [GTSAM](https://github.com/borglab/gtsam)
-by the Borglab (Frank Dellaert et al.), licensed under BSD-3-Clause, using its
-[official GNSS double-difference factors](https://gtsam.org/2026/06/10/rtk-gnss-double-difference.html).
+```
+rover raw -> /rover/gnss/observation ----+
+                                          +-> real_time_kinematic -> /gnss/solution
+base RTCM -> /base/gnss/observation -----+
+          -> /base/gnss/station_ecef
+rover/base -> /gnss/ephemeris
+```
+
+Supported decoder formats in the ROS1 generic raw node:
+
+- u-blox UBX
+- Septentrio SBF
+- NovAtel OEM
+- RTCM3
+
+Streams are opened through RTKLIB and can be serial, file, TCP client or NTRIP
+client.
+
+## Mode B — external solved solution
+
+```bash
+roslaunch gnss_ros_standardization external_solution.launch
+```
+
+Input:
+
+```
+/gnss/external_solution
+  timestamp
+  WGS84 latitude / longitude / ellipsoidal height
+  position covariance
+  FIX / FLOAT / SINGLE / ...
+  optional GPS week/TOW
+  optional velocity
+  optional quality fields
+```
+
+Output:
+
+```
+/gnss/solution
+```
+
+The adapter performs BLH->ECEF, BLH->ENU and covariance-frame normalization.
+
+## ENU origin
+
+Both modes can publish the same fixed ENU frame. For globally repeatable mapping
+and relocalization, configure a fixed WGS84 ellipsoidal BLH origin instead of a
+first-fix origin.
+
+The ENU origin is a coordinate-system definition. It is not the same as the RTK
+base-station coordinate and it is not the initial SLAM pose.
+
+## Current ROS1 scope
+
+The core raw-observation pipeline is implemented in ROS1 using a generic RTKLIB
+decoder instead of mechanically porting every ROS2 brand-specific driver.
+
+Therefore the ROS1 branch currently provides the essential raw functionality:
+
+```
+raw bytes -> observations/ephemerides -> SPP/RTK -> GnssSolution
+```
+
+The following ROS2 driver extras are **not yet feature-parity ports**:
+
+- automatic receiver configuration commands
+- receiver-specific binary PVT fan-out
+- receiver IMU outputs
+- receiver-specific NMEA aggregation/fan-out
+- rosbag2/RINEX converter tooling
+- tightly coupled GTSAM FGO examples
+
+Those components remain in the repository history/main branch and can be ported
+independently without changing the public ROS1 raw/solution interfaces.
+
+## Important runtime rule
+
+Run only the solution producer that corresponds to the selected mode. Do not
+publish multiple independent producers to `/gnss/solution` simultaneously
+unless an explicit mux/arbitration layer is added.
 
 ## License
 
-Released under the [MIT License](LICENSE).
-
-## Contact
-
-Maintainer: Daiki Niimi (daiki.niimi@ruri.waseda.jp)
+MIT. The vendored RTKLIB fork retains its own upstream license.
