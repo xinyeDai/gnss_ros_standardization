@@ -1,0 +1,10 @@
+<launch>
+  <arg name="config" default="$(find gnss_ros_standardization)/config/external_solution.yaml"/>
+
+  <node pkg="gnss_ros_standardization"
+        type="external_solution_adapter"
+        name="external_solution_adapter"
+        output="screen">
+    <rosparam command="load" file="$(arg config)"/>
+  </node>
+</launch>
