@@ -1,0 +1,30 @@
+<launch>
+  <arg name="rover_config"/>
+  <arg name="base_config"/>
+  <arg name="rtk_config" default="$(find gnss_ros_standardization)/config/rtk_ros1.yaml"/>
+
+  <group ns="rover">
+    <node pkg="gnss_ros_standardization"
+          type="raw_gnss_decoder"
+          name="raw_gnss_decoder"
+          output="screen">
+      <rosparam command="load" file="$(arg rover_config)"/>
+    </node>
+  </group>
+
+  <group ns="base">
+    <node pkg="gnss_ros_standardization"
+          type="raw_gnss_decoder"
+          name="raw_gnss_decoder"
+          output="screen">
+      <rosparam command="load" file="$(arg base_config)"/>
+    </node>
+  </group>
+
+  <node pkg="gnss_ros_standardization"
+        type="real_time_kinematic"
+        name="real_time_kinematic"
+        output="screen">
+    <rosparam command="load" file="$(arg rtk_config)"/>
+  </node>
+</launch>
