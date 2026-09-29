@@ -18,6 +18,8 @@ receiver_option: ""
 frame_id: gnss_receiver
 use_gps_timestamp: false
 poll_period_ms: 10
+# Hold split RTCM MSM frames briefly so all constellations for one epoch are merged.
+rtcm_epoch_hold_ms: 20
 
 observation_topic: /gnss/observation
 ephemeris_topic: /gnss/ephemeris
