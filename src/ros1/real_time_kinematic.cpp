@@ -41,15 +41,21 @@ class RealTimeKinematicNode {
     pnh_.param<std::string>("base_position_mode", base_position_mode_, "rtcm");
     configureBasePosition();
 
-    pnh_.param<bool>("auto_origin", auto_origin_, false);
+    pnh_.param<bool>("auto_origin", auto_origin_, true);
     double olat = 0.0, olon = 0.0, oalt = 0.0;
     pnh_.param<double>("origin_latitude", olat, 0.0);
     pnh_.param<double>("origin_longitude", olon, 0.0);
     pnh_.param<double>("origin_altitude", oalt, 0.0);
     if (!auto_origin_) {
-      const double llh[3] = {olat * D2R, olon * D2R, oalt};
-      pos2ecef(llh, origin_ecef_);
-      if (norm(origin_ecef_, 3) > 0.0) origin_set_ = true;
+      const bool configured =
+          std::fabs(olat) > 1e-12 || std::fabs(olon) > 1e-12 || std::fabs(oalt) > 1e-6;
+      if (configured) {
+        const double llh[3] = {olat * D2R, olon * D2R, oalt};
+        pos2ecef(llh, origin_ecef_);
+        origin_set_ = true;
+      } else {
+        ROS_WARN("Fixed ENU origin requested but left at zero; falling back to RTK base position.");
+      }
     }
 
     std::memset(&nav_, 0, sizeof(nav_));
