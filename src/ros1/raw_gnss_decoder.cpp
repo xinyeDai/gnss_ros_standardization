@@ -31,6 +31,7 @@ class RawGnssDecoderNode {
     pnh_.param<std::string>("station_topic", station_topic_, "/gnss/station_ecef");
     pnh_.param<bool>("use_gps_timestamp", use_gps_timestamp_, false);
     pnh_.param<int>("poll_period_ms", poll_period_ms_, 10);
+    pnh_.param<int>("rtcm_epoch_hold_ms", rtcm_epoch_hold_ms_, 20);
 
     if (stream_path_.empty()) {
       throw std::runtime_error("~stream_path is required");
@@ -136,7 +137,7 @@ class RawGnssDecoderNode {
       const int ret = is_rtcm_ ? input_rtcm3(&rtcm_, buf[i])
                                : input_raw(&raw_, format_, buf[i]);
       if (ret == 1) {
-        if (is_rtcm_) publishObservations(rtcm_.obs);
+        if (is_rtcm_) accumulateRtcmObservations(rtcm_.obs);
         else publishObservations(raw_.obs);
       } else if (ret == 2) {
         if (is_rtcm_) publishEphemerides(rtcm_.nav);
@@ -146,6 +147,87 @@ class RawGnssDecoderNode {
       } else if (ret < 0) {
         ROS_WARN_THROTTLE(2.0, "GNSS decoder reported an input error");
       }
+    }
+    if (is_rtcm_) flushRtcmEpochs();
+  }
+
+  struct RtcmEpochBuffer {
+    int week{0};
+    double tow{0.0};
+    ros::Time first_seen;
+    std::vector<gnss_ros_standardization::GnssObservation> observations;
+  };
+
+  void accumulateRtcmObservations(const obs_t& obs) {
+    if (obs.n <= 0 || obs.data == NULL) return;
+    int week = 0;
+    const gtime_t epoch = obs.data[0].time;
+    const double tow = time2gpst(epoch, &week);
+    if (week <= 0 || !std::isfinite(tow)) return;
+
+    const long long key =
+        static_cast<long long>(week) * 604800000LL +
+        static_cast<long long>(std::llround(tow * 1000.0));
+    RtcmEpochBuffer& dst = rtcm_epochs_[key];
+    if (dst.first_seen.isZero()) {
+      dst.week = week;
+      dst.tow = tow;
+      dst.first_seen = ros::Time::now();
+    }
+
+    for (int i = 0; i < obs.n; ++i) {
+      for (int k = 0; k < NFREQ + NEXOBS; ++k) {
+        const bool empty = obs.data[i].P[k] == 0.0 &&
+                           obs.data[i].L[k] == 0.0 &&
+                           obs.data[i].D[k] == 0.0 &&
+                           obs.data[i].SNR[k] == 0;
+        if (empty) continue;
+        const gnss_ros_standardization::GnssObservation m =
+            gnss_ros1::obsToMsg(obs.data[i], k);
+
+        bool replaced = false;
+        for (size_t j = 0; j < dst.observations.size(); ++j) {
+          if (dst.observations[j].sat == m.sat &&
+              dst.observations[j].code == m.code) {
+            dst.observations[j] = m;
+            replaced = true;
+            break;
+          }
+        }
+        if (!replaced) dst.observations.push_back(m);
+      }
+    }
+  }
+
+  void flushRtcmEpochs() {
+    if (rtcm_epochs_.empty()) return;
+    const ros::Time now = ros::Time::now();
+
+    for (std::map<long long, RtcmEpochBuffer>::iterator it = rtcm_epochs_.begin();
+         it != rtcm_epochs_.end();) {
+      const bool has_newer = std::next(it) != rtcm_epochs_.end();
+      const double age_ms = (now - it->second.first_seen).toSec() * 1000.0;
+      if (!has_newer && age_ms < static_cast<double>(rtcm_epoch_hold_ms_)) {
+        ++it;
+        continue;
+      }
+
+      gnss_ros_standardization::GnssObservations msg;
+      const gtime_t gpst =
+          gpst2time(it->second.week, it->second.tow);
+      msg.header.stamp =
+          use_gps_timestamp_ ? gnss_ros1::gpstToUtcRosTime(gpst) : now;
+      msg.header.frame_id = frame_id_;
+      msg.week = static_cast<uint32_t>(it->second.week);
+      msg.tow = it->second.tow;
+      msg.observations.swap(it->second.observations);
+      if (!msg.observations.empty()) {
+        obs_pub_.publish(msg);
+        ROS_INFO_THROTTLE(1.0,
+            "RTCM GNSS: week=%u tow=%.3f aggregated_signals=%zu",
+            msg.week, msg.tow, msg.observations.size());
+      }
+      it = rtcm_epochs_.erase(it);
     }
   }
 
@@ -231,6 +313,7 @@ class RawGnssDecoderNode {
   std::string station_topic_;
   bool use_gps_timestamp_{false};
   int poll_period_ms_{10};
+  int rtcm_epoch_hold_ms_{20};
 
   int format_{STRFMT_UBX};
   int stream_type_{STR_SERIAL};
@@ -241,6 +324,7 @@ class RawGnssDecoderNode {
   stream_t stream_{};
   raw_t raw_{};
   rtcm_t rtcm_{};
+  std::map<long long, RtcmEpochBuffer> rtcm_epochs_;
 };
 
 int main(int argc, char** argv) {
