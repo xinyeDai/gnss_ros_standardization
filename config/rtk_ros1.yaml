@@ -1,0 +1,40 @@
+rover_observation_topic: /rover/gnss/observation
+base_observation_topic: /base/gnss/observation
+ephemeris_topic: /gnss/ephemeris
+solution_topic: /gnss/solution
+base_station_topic: /base/gnss/station_ecef
+
+match_tolerance_s: 0.002
+max_base_age_s: 30.0
+base_queue_size: 100
+elevation_mask_deg: 15.0
+
+frequencies:
+  l1: true
+  l2: true
+  l5: false
+
+# rtcm: receive ECEF station position from the base RTCM decoder (1005/1006).
+# llh/ecef: use fixed coordinates below.
+base_position_mode: rtcm
+base_latitude: 0.0
+base_longitude: 0.0
+base_altitude: 0.0
+base_x: 0.0
+base_y: 0.0
+base_z: 0.0
+
+ambiguity_mode: 1
+ambiguity_threshold: 3.0
+ambiguity_min_fix: 10
+ambiguity_min_fix_sats: 4
+ambiguity_min_hold_sats: 5
+reject_phase_m: 5.0
+reject_code_m: 30.0
+
+# For a repeatable global map, set false and configure a fixed origin.
+# If false but the configured origin is zero, the RTK node falls back to base ECEF.
+auto_origin: false
+origin_latitude: 0.0
+origin_longitude: 0.0
+origin_altitude: 0.0
