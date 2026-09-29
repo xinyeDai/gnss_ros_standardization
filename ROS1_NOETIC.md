@@ -1,76 +1,103 @@
-# ROS1 Noetic integration branch
+# ROS1 Noetic design
 
-This branch introduces a ROS1/catkin path for `gnss_ros_standardization`.
+## Goal
 
-## Phase 1 scope
+The ROS1 branch is intentionally a **dual-input GNSS frontend**.
 
-The first integration target is **solution-level (loosely coupled) GNSS**:
+### Raw Observation Mode
 
 ```
-already-solved GNSS/PVT/RTK
-  -> /gnss/external_solution  (ExternalGnssSolution)
-  -> external_solution_adapter
-  -> /gnss/solution           (GnssSolution)
-  -> LIO/LIVO/PGO backend
+UBX / SBF / NovAtel OEM / RTCM3
+        |
+        v
+raw_gnss_decoder
+        |
+        +--> GnssObservations
+        +--> GnssEphemerides
+                 |
+           SPP or RTK
+                 |
+                 v
+            GnssSolution
 ```
 
-The original raw-observation, ephemeris, SPP, RTK and FGO sources are retained in
-the repository for later ROS1 migration, but they are not built by the Phase 1
-catkin CMakeLists yet.
+This path preserves the package's original purpose: exposing standardized raw
+GNSS observations and ephemerides and optionally computing SPP/RTK locally.
 
-## Public solution interface
+### External Solution Mode
 
-`GnssSolution.msg` is the downstream contract. It contains:
-
-- ROS measurement timestamp and optional canonical GPS week/TOW
-- standardized FIX/FLOAT/SINGLE/etc. status
-- WGS84 BLH
-- ECEF position/covariance
-- ENU position/covariance and the ENU origin
-- optional ECEF/ENU velocity and covariance
-- quality fields such as satellite count, AR ratio, correction age and DOP
-
-## External Solution Mode
-
-`ExternalGnssSolution.msg` is deliberately smaller. An existing receiver,
-GNSS/INS unit, proprietary driver or legacy ROS node can provide:
-
-- timestamp
-- WGS84 BLH
-- 3x3 position covariance
-- standardized status
-- optional GPS week/TOW
-- optional satellite count / ratio / age / DOP
-- optional velocity and velocity covariance
-
-The adapter performs BLH->ECEF, BLH->ENU, covariance-frame conversion and publishes
-one normalized `GnssSolution`.
-
-### ENU origin
-
-For mapping and relocalization, use a fixed origin:
-
-```yaml
-auto_origin: false
-origin_latitude: 30.0
-origin_longitude: 114.0
-origin_altitude: 30.0
+```
+existing receiver / GNSS-INS / proprietary positioning program
+        |
+timestamp + BLH + covariance + status
+        |
+        v
+ExternalGnssSolution
+        |
+external_solution_adapter
+        |
+        v
+GnssSolution
 ```
 
-For quick tests, `auto_origin: true` uses the first valid solution.
+This path is for systems where GNSS has already been solved upstream.
 
-## Build
+## Why both modes use GnssSolution
 
-```bash
-cd ~/catkin_ws
-catkin_make
-source devel/setup.bash
-```
+The downstream SLAM backend should not depend on receiver brand or on whether
+position was computed by RTKLIB, by a commercial receiver, or by another GNSS
+program.
 
-## Run
+`GnssSolution` is therefore the single position-level contract.
 
-```bash
-roslaunch gnss_ros_standardization external_solution.launch
-```
+For future tightly coupled GNSS/LIO work, the raw interfaces remain available:
+`GnssObservations + GnssEphemerides` can be consumed directly instead of
+`GnssSolution`.
 
-The downstream SLAM system should subscribe only to `/gnss/solution`.
+## ROS1 executables
+
+- `raw_gnss_decoder`
+- `single_point_positioning`
+- `real_time_kinematic`
+- `external_solution_adapter`
+
+## Coordinate policy
+
+`GnssSolution` includes WGS84 BLH, ECEF, ENU and the ECEF coordinate of the
+ENU origin.
+
+A fixed ENU origin is recommended for global-map/relocalization use. Both Raw
+and External modes must be configured with the same origin when their outputs
+need to be interchangeable.
+
+RTK base-station position is a different concept: it is used by RTKLIB to form
+the differential solution and does not define the SLAM global frame unless the
+user deliberately chooses the same coordinate as the ENU origin.
+
+## Time policy
+
+- `header.stamp`: measurement timestamp used by downstream ROS sensor fusion
+- `time_week/time_tow`: canonical GPST when available
+- raw decoders can stamp by ROS receive time or GPST-derived UTC
+- SPP/RTK preserve the rover observation stamp
+- External Mode preserves the upstream input stamp and validates GPST if supplied
+
+## Covariance policy
+
+All public covariance matrices are variances/covariances, not standard
+deviations.
+
+- `pos_cov_ecef`: m^2 in ECEF
+- `pos_enu_cov`: m^2 in the local ENU tangent frame
+- velocity covariance: (m/s)^2
+
+External Mode accepts either ENU or ECEF covariance and produces both.
+
+## Current boundary
+
+ROS1 Raw Mode is implemented through RTKLIB's generic stream and raw decoders.
+It is not yet a line-for-line port of every ROS2 receiver driver feature. The
+receiver must already be configured to output the required raw messages.
+
+This boundary keeps the core interface stable while later receiver-specific
+configuration, PVT, IMU, NMEA and converter features are ported separately.
