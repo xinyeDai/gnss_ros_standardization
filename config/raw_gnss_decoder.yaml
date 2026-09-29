@@ -6,11 +6,11 @@ format: ubx
 stream_type: serial
 
 # RTKLIB stream path examples:
-# serial: /dev/ttyACM0:115200:8:n:1:off
+# serial: ttyACM0:115200:8:n:1:off  # RTKLIB stream path omits /dev/
 # file:   /data/rover.ubx
 # tcp:    192.168.1.10:3001
 # ntrip:  user:password@caster.example.com:2101/MOUNT
-stream_path: /dev/ttyACM0:115200:8:n:1:off
+stream_path: ttyACM0:115200:8:n:1:off
 
 # RTKLIB receiver-dependent decoder options, if required.
 receiver_option: ""
