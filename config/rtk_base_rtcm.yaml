@@ -1,0 +1,10 @@
+format: rtcm3
+stream_type: ntrip_client
+stream_path: user:password@caster.example.com:2101/MOUNT
+receiver_option: ""
+frame_id: base_gnss
+use_gps_timestamp: false
+poll_period_ms: 10
+observation_topic: /base/gnss/observation
+ephemeris_topic: /gnss/ephemeris
+station_topic: /base/gnss/station_ecef
