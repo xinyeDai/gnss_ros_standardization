@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include <ros/ros.h>
+#include <geometry_msgs/PointStamped.h>
 
 #include <gnss_ros_standardization/GnssEphemerides.h>
 #include <gnss_ros_standardization/GnssObservations.h>
@@ -26,6 +27,7 @@ class RawGnssDecoderNode {
     pnh_.param<std::string>("frame_id", frame_id_, "gnss_receiver");
     pnh_.param<std::string>("observation_topic", observation_topic_, "/gnss/observation");
     pnh_.param<std::string>("ephemeris_topic", ephemeris_topic_, "/gnss/ephemeris");
+    pnh_.param<std::string>("station_topic", station_topic_, "/gnss/station_ecef");
     pnh_.param<bool>("use_gps_timestamp", use_gps_timestamp_, false);
     pnh_.param<int>("poll_period_ms", poll_period_ms_, 10);
 
@@ -42,6 +44,7 @@ class RawGnssDecoderNode {
         observation_topic_, 20);
     eph_pub_ = nh_.advertise<gnss_ros_standardization::GnssEphemerides>(
         ephemeris_topic_, 1, true);
+    station_pub_ = nh_.advertise<geometry_msgs::PointStamped>(station_topic_, 1, true);
 
     strinit(&stream_);
     if (!stropen(&stream_, stream_type_, STR_MODE_R, stream_path_.c_str())) {
@@ -125,6 +128,8 @@ class RawGnssDecoderNode {
       } else if (ret == 2) {
         if (is_rtcm_) publishEphemerides(rtcm_.nav);
         else publishEphemerides(raw_.nav);
+      } else if (is_rtcm_ && ret == 5) {
+        publishRtcmStation();
       } else if (ret < 0) {
         ROS_WARN_THROTTLE(2.0, "GNSS decoder reported an input error");
       }
@@ -163,6 +168,20 @@ class RawGnssDecoderNode {
     }
   }
 
+
+  void publishRtcmStation() {
+    if (norm(rtcm_.sta.pos, 3) <= 0.0) return;
+    geometry_msgs::PointStamped msg;
+    msg.header.stamp = ros::Time::now();
+    msg.header.frame_id = "ecef";
+    msg.point.x = rtcm_.sta.pos[0];
+    msg.point.y = rtcm_.sta.pos[1];
+    msg.point.z = rtcm_.sta.pos[2];
+    station_pub_.publish(msg);
+    ROS_INFO_THROTTLE(10.0, "RTCM station ECEF: %.3f %.3f %.3f",
+                      msg.point.x, msg.point.y, msg.point.z);
+  }
+
   void publishEphemerides(const nav_t& nav) {
     gnss_ros_standardization::GnssEphemerides msg;
     msg.header.stamp = ros::Time::now();
@@ -186,6 +205,7 @@ class RawGnssDecoderNode {
   ros::NodeHandle pnh_;
   ros::Publisher obs_pub_;
   ros::Publisher eph_pub_;
+  ros::Publisher station_pub_;
   ros::Timer timer_;
 
   std::string format_name_;
@@ -195,6 +215,7 @@ class RawGnssDecoderNode {
   std::string frame_id_;
   std::string observation_topic_;
   std::string ephemeris_topic_;
+  std::string station_topic_;
   bool use_gps_timestamp_{false};
   int poll_period_ms_{10};
 
