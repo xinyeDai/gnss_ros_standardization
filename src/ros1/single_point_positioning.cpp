@@ -7,6 +7,7 @@
 #include <gnss_ros_standardization/ros1_gnss_core.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <mutex>
 #include <string>
@@ -33,9 +34,15 @@ class SinglePointPositioningNode {
     pnh_.param<double>("origin_longitude", lon, 0.0);
     pnh_.param<double>("origin_altitude", alt, 0.0);
     if (!auto_origin_) {
-      const double llh[3] = {lat * D2R, lon * D2R, alt};
-      pos2ecef(llh, origin_ecef_);
-      origin_set_ = true;
+      const bool configured =
+          std::fabs(lat) > 1e-12 || std::fabs(lon) > 1e-12 || std::fabs(alt) > 1e-6;
+      if (configured) {
+        const double llh[3] = {lat * D2R, lon * D2R, alt};
+        pos2ecef(llh, origin_ecef_);
+        origin_set_ = true;
+      } else {
+        ROS_WARN("Fixed ENU origin requested but left at zero; using first SPP solution.");
+      }
     }
 
     std::memset(&nav_, 0, sizeof(nav_));
