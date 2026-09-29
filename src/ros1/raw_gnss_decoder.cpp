@@ -10,6 +10,8 @@
 #include <cctype>
 #include <cmath>
 #include <cstring>
+#include <iterator>
+#include <map>
 #include <stdexcept>
 #include <string>
 #include <vector>
