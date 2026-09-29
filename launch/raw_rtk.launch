@@ -1,6 +1,6 @@
 <launch>
-  <arg name="rover_config"/>
-  <arg name="base_config"/>
+  <arg name="rover_config" default="$(find gnss_ros_standardization)/config/rtk_rover_raw.yaml"/>
+  <arg name="base_config" default="$(find gnss_ros_standardization)/config/rtk_base_rtcm.yaml"/>
   <arg name="rtk_config" default="$(find gnss_ros_standardization)/config/rtk_ros1.yaml"/>
 
   <group ns="rover">
