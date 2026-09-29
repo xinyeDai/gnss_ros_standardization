@@ -89,9 +89,11 @@ class ExternalSolutionAdapter {
     pnh_.param<double>("origin_altitude", alt, 0.0);
 
     if (!auto_origin_) {
-      if (!finiteLlh(lat, lon, alt)) {
-        ROS_FATAL("Invalid fixed ENU origin.");
-        throw std::runtime_error("invalid ENU origin");
+      const bool configured =
+          std::fabs(lat) > 1e-12 || std::fabs(lon) > 1e-12 || std::fabs(alt) > 1e-6;
+      if (!configured || !finiteLlh(lat, lon, alt)) {
+        ROS_FATAL("Fixed ENU origin requested but no valid non-zero BLH was configured.");
+        throw std::runtime_error("invalid fixed ENU origin");
       }
       setOrigin(lat, lon, alt);
       ROS_INFO("Using fixed ENU origin: lat=%.9f lon=%.9f alt=%.3f", lat, lon, alt);
@@ -117,6 +119,32 @@ class ExternalSolutionAdapter {
   }
 
   void callback(const grs::ExternalGnssSolution::ConstPtr& in) {
+    if (in->header.stamp.isZero()) {
+      ROS_WARN_THROTTLE(5.0,
+          "External GNSS header.stamp is zero; downstream time synchronization may fail.");
+    }
+    if (in->status > grs::ExternalGnssSolution::STATUS_EKF) {
+      ROS_WARN_THROTTLE(2.0, "Rejecting external GNSS solution with unknown status=%u.",
+                        static_cast<unsigned>(in->status));
+      return;
+    }
+    if (in->covariance_frame != grs::ExternalGnssSolution::COVARIANCE_FRAME_ENU &&
+        in->covariance_frame != grs::ExternalGnssSolution::COVARIANCE_FRAME_ECEF) {
+      ROS_WARN_THROTTLE(2.0, "Rejecting external GNSS solution with invalid covariance_frame.");
+      return;
+    }
+    if (in->has_velocity &&
+        in->velocity_frame != grs::ExternalGnssSolution::VELOCITY_FRAME_ENU &&
+        in->velocity_frame != grs::ExternalGnssSolution::VELOCITY_FRAME_ECEF) {
+      ROS_WARN_THROTTLE(2.0, "Rejecting external GNSS solution with invalid velocity_frame.");
+      return;
+    }
+    if (in->has_gnss_time &&
+        (in->time_week == 0 || !std::isfinite(in->time_tow) ||
+         in->time_tow < 0.0 || in->time_tow >= 604800.0)) {
+      ROS_WARN_THROTTLE(2.0, "Rejecting external GNSS solution with invalid GPS week/TOW.");
+      return;
+    }
     if (!finiteLlh(in->latitude, in->longitude, in->altitude)) {
       ROS_WARN_THROTTLE(2.0, "Rejecting external GNSS solution with invalid BLH.");
       return;
