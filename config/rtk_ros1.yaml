@@ -34,7 +34,7 @@ reject_code_m: 30.0
 
 # For a repeatable global map, set false and configure a fixed origin.
 # If false but the configured origin is zero, the RTK node falls back to base ECEF.
-auto_origin: false
+auto_origin: true
 origin_latitude: 0.0
 origin_longitude: 0.0
 origin_altitude: 0.0
