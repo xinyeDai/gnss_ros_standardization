@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstring>
 #include <stdexcept>
 #include <string>
@@ -53,14 +54,26 @@ class RawGnssDecoderNode {
       throw std::runtime_error(std::string("failed to open RTKLIB stream: ") + stat);
     }
 
+    const ros::Time now_ros = ros::Time::now();
+    gtime_t now_utc{};
+    now_utc.time = static_cast<time_t>(now_ros.sec);
+    now_utc.sec = static_cast<double>(now_ros.nsec) * 1e-9;
+    const gtime_t now_gpst = utc2gpst(now_utc);
+
     if (is_rtcm_) {
       if (!init_rtcm(&rtcm_)) throw std::runtime_error("init_rtcm failed");
+      // RTCM messages often carry only time-of-week/day. RTKLIB needs an
+      // approximate absolute epoch to resolve week/day rollover correctly.
+      rtcm_.time = now_gpst;
       if (!receiver_option_.empty()) {
         std::strncpy(rtcm_.opt, receiver_option_.c_str(), sizeof(rtcm_.opt) - 1);
       }
       rtcm_initialized_ = true;
     } else {
       if (!init_raw(&raw_, format_)) throw std::runtime_error("init_raw failed");
+      // Also seed raw receiver time; formats with incomplete date/week fields
+      // can use this as the same rollover reference.
+      raw_.time = now_gpst;
       if (!receiver_option_.empty()) {
         std::strncpy(raw_.opt, receiver_option_.c_str(), sizeof(raw_.opt) - 1);
       }
