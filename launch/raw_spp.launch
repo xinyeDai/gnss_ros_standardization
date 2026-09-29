@@ -1,0 +1,18 @@
+<launch>
+  <arg name="decoder_config" default="$(find gnss_ros_standardization)/config/raw_gnss_decoder.yaml"/>
+  <arg name="spp_config" default="$(find gnss_ros_standardization)/config/spp_ros1.yaml"/>
+
+  <node pkg="gnss_ros_standardization"
+        type="raw_gnss_decoder"
+        name="raw_gnss_decoder"
+        output="screen">
+    <rosparam command="load" file="$(arg decoder_config)"/>
+  </node>
+
+  <node pkg="gnss_ros_standardization"
+        type="single_point_positioning"
+        name="single_point_positioning"
+        output="screen">
+    <rosparam command="load" file="$(arg spp_config)"/>
+  </node>
+</launch>
