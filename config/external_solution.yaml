@@ -1,0 +1,11 @@
+# External-solution normalization for ROS1/Noetic.
+input_topic: /gnss/external_solution
+output_topic: /gnss/solution
+frame_id: gnss_link
+
+# Recommended for globally repeatable SLAM/relocalization:
+# use a fixed WGS84 ellipsoidal BLH origin shared by every run.
+auto_origin: false
+origin_latitude: 0.0
+origin_longitude: 0.0
+origin_altitude: 0.0
