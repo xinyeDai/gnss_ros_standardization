@@ -156,7 +156,7 @@ class RawGnssDecoderNode {
   struct RtcmEpochBuffer {
     int week{0};
     double tow{0.0};
-    ros::Time first_seen;
+    ros::WallTime first_seen;
     std::vector<gnss_ros_standardization::GnssObservation> observations;
   };
 
@@ -174,7 +174,7 @@ class RawGnssDecoderNode {
     if (dst.first_seen.isZero()) {
       dst.week = week;
       dst.tow = tow;
-      dst.first_seen = ros::Time::now();
+      dst.first_seen = ros::WallTime::now();
     }
 
     for (int i = 0; i < obs.n; ++i) {
@@ -203,12 +203,13 @@ class RawGnssDecoderNode {
 
   void flushRtcmEpochs() {
     if (rtcm_epochs_.empty()) return;
-    const ros::Time now = ros::Time::now();
+    const ros::Time stamp_now = ros::Time::now();
+    const ros::WallTime wall_now = ros::WallTime::now();
 
     for (std::map<long long, RtcmEpochBuffer>::iterator it = rtcm_epochs_.begin();
          it != rtcm_epochs_.end();) {
       const bool has_newer = std::next(it) != rtcm_epochs_.end();
-      const double age_ms = (now - it->second.first_seen).toSec() * 1000.0;
+      const double age_ms = (wall_now - it->second.first_seen).toSec() * 1000.0;
       if (!has_newer && age_ms < static_cast<double>(rtcm_epoch_hold_ms_)) {
         ++it;
         continue;
@@ -218,7 +219,7 @@ class RawGnssDecoderNode {
       const gtime_t gpst =
           gpst2time(it->second.week, it->second.tow);
       msg.header.stamp =
-          use_gps_timestamp_ ? gnss_ros1::gpstToUtcRosTime(gpst) : now;
+          use_gps_timestamp_ ? gnss_ros1::gpstToUtcRosTime(gpst) : stamp_now;
       msg.header.frame_id = frame_id_;
       msg.week = static_cast<uint32_t>(it->second.week);
       msg.tow = it->second.tow;
