@@ -419,6 +419,18 @@ inline void fillCovarianceFromSol(const sol_t& sol,
   }
 }
 
+inline uint8_t solutionStatusFromRtklib(int stat) {
+  switch (stat) {
+    case SOLQ_FIX: return gnss_ros_standardization::GnssSolution::STATUS_FIX;
+    case SOLQ_FLOAT: return gnss_ros_standardization::GnssSolution::STATUS_FLOAT;
+    case SOLQ_SBAS: return gnss_ros_standardization::GnssSolution::STATUS_SBAS;
+    case SOLQ_DGPS: return gnss_ros_standardization::GnssSolution::STATUS_DGPS;
+    case SOLQ_SINGLE: return gnss_ros_standardization::GnssSolution::STATUS_SINGLE;
+    case SOLQ_PPP: return gnss_ros_standardization::GnssSolution::STATUS_PPP;
+    default: return gnss_ros_standardization::GnssSolution::STATUS_NONE;
+  }
+}
+
 inline gnss_ros_standardization::GnssSolution makeSolution(
     const sol_t& sol, const ssat_t* ssat, double elmin,
     const ros::Time& stamp, const double origin_ecef[3]) {
@@ -430,7 +442,7 @@ inline gnss_ros_standardization::GnssSolution makeSolution(
   out.time_tow = time2gpst(sol.time, &week);
   out.time_week = static_cast<uint32_t>(week);
   out.solution_source = gnss_ros_standardization::GnssSolution::SOLUTION_SOURCE_COMPUTED;
-  out.status = static_cast<uint8_t>(sol.stat);
+  out.status = solutionStatusFromRtklib(sol.stat);
   out.num_sats = static_cast<uint8_t>(sol.ns);
   out.ratio = static_cast<float>(sol.ratio);
   out.age_diff = static_cast<float>(sol.age);
