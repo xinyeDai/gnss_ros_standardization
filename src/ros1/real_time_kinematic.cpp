@@ -104,6 +104,7 @@ class RealTimeKinematicNode {
   void initializeRtk() {
     prcopt_t opt = prcopt_default;
     opt.mode = PMODE_KINEMA;
+    opt.refpos = (base_position_mode_ == "rtcm") ? 4 : 0;
     opt.elmin = elevation_mask_deg_ * D2R;
     opt.nf = freq_.l5 ? 3 : (freq_.l2 ? 2 : 1);
 
